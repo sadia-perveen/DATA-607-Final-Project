@@ -1,0 +1,761 @@
+---
+title: "DATA607FinalProjectTeamBanuSadia PART1"
+author: "Banu Boopalan & Sadia Perveen"
+date: "12/10/2019"
+output:
+  html_document:
+    theme: journal
+    toc: TRUE
+    toc_float: TRUE  
+    toc_depth: 3
+    code_folding: hide
+  ioslides_presentation: default
+  pdf_document: default
+  slidy_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(jsonlite)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(kableExtra)
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+library(rvest)
+library(syuzhet)
+library(ggplot2)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(tidytext)
+library(tm)
+library(reshape2)
+library(topicmodels)
+library(widyr)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+library(quanteda)
+#install.packages("IDPmisc")
+library(IDPmisc)
+
+```
+
+#### PROJECT TEAM INFORMATION:
+
+README : In this RMD, please see PART1 for the project. Another RMD will be submitted for PART2. 
+
+PART1 : Will contain ELA/MATH scores analysis  and NYtimes API data analysis
+PART2 : Will contain Web scrape of Wikipedia page and neo4j data model and implementation.
+
+Team Members: Banu Boopalan & Sadia Perveen. For our final project, we decided to work on combining our initial proposals into one RMD file. First proposal was with looking at the following dataset on assessment data on ELA and Math and combining them with FreeReducedPriceLunch.csv and performing analysis and visualization. The second proposal was to work with API data from NYtimes API and performing sentiment analysis, topic models using https://www.tidytextmining.com/. We have tried to write back data to neo4j and try to requery back into R to show querying on the text data stored from webscraping in R as nodes and relationships.
+
+Our collaboration was over the phone and whatsapp and gotomeeting to show our ideas initially. We thought we could somehow look at Education related topics on the retrieved data from NYTIMES API on ELA and Math assessments for the NY schools but we were not able to figure this out.Possibly this may be considered as an enhancement to this code to connect the dataset analysis to Twitter data or other website source data to understand on sentiment related to ELA/MATH performance.
+
+SADIA PERVEEN PROPOSAL:
+Project Proposal: Since I am currently working in the educational field I wanted to do a analysis on district SES status compared to their yearly test scores. My two data source would be from https://data.nysed.gov/downloads.php This database contains assessment data for grades 3-8 on ELA and Math at the state, county, district, and school level broken down by various subgroups.This is where I have data on test scores for ELA and MAT for NY schools and districts. The question I am looking to answer is if schools with higher SES status have higher ELA and MAT scores. First I would need to combine data from both of my sources. Second I would need to conduct a analysis and see if the difference is significant. Third I would need to display my results in a visualization form that is easy to understand. 
+
+BANU BOOPALAN PROPOSAL: 
+https://rpubs.com/BanuB/551009. 
+
+### ALL DATA SOURCES:
+
+## ANALYIS 1 : 
+https://raw.githubusercontent.com/sadia-perveen/DATA-607-Final-Project/master/Free%20Reduced%20Price%20Lunch.csv"
+ELA MATH.csv
+
+## ANALYSIS 2: 
+
+Topic of interest #MeToo. Reviewed most popular shared NYtimes on Twitter and Facebook. Then looked at previous timeframe of 2018 and 2017 October and November month at the height of movement to see the topics in these datasets. Even though data was there, there wasn't a significant number of articles in Archive during 2018 and 2017 month of October and November that were related to Metoo movement. Primary topics found were related to President Trump. The API was significant amount of data retrieved even with a page count of 5-8. A max of pages can be 100 when using JSON API call. So, the analysis was performed only on the NYTIMES Des_Facet description of articles summary text that was pulled back on these fields.  We are not sure if there would have been a better way to scrape direct NYTIMES articles directly (as I heard that NYTIMES articles cannot be scraped directly or a comparison news agency API would be BBC and Al Jazeera API to pull articles back on this topic). Topic model used LDA to get topics. Tried to run a cluster dendogram but had issues with this. 
+
+Conclusions. Running the LDA model once took a long time so I had to quit the session, also my R session crashed multiple times when I tried to run the RMD file. Might need to understand the LDA model better to figure out how to run it. Running bigram and unigram token analysis to discover the vertices to report on igraph was great to visualize. 
+
+First API call and dataset - all articles shared in current month
+https://api.nytimes.com/svc/mostpopular/v2/shared/30/twitter.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG
+https://api.nytimes.com/svc/mostpopular/v2/shared/30/facebook.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG
+
+Second API call and dataset -  Here I tried to run for year 2019, 2018 and 2017 looking at 10, 11, 12 the month to see frequency of #metoo on des_Facet field of returned page. Renamed these 2 datasets and saved to Rdata so I can reload it at times to save from calling the API over and over.
+https://api.nytimes.com/svc/archive/v1/2018/11.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG
+https://api.nytimes.com/svc/archive/v1/2017/12.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG
+
+
+## PART 2:  SUBMITTED AS PART OF A SEPARATE RMD DOCUMENT and LINK DUE TO SIZE
+
+Scrape Wikipedia using XPATH - 1 webpage to bring in headline and paragraph data into a data set and sentiment analysis on the data. 
+"https://en.wikipedia.org/wiki/Me_Too_movement"
+
+Store Dataset from Wikiscrape back to neo4j database using RNeo4j driver. 
+We are trying to understand how to store text data from R by connecting to RNeo4j
+How to retrieve the data stored in neo4j back and report in R
+
+--------------------------------------------------------------------------------------------------------------
+
+
+
+#### ANALYIS 1 WORKFLOW SECTION
+
+### Connect to ELAMATH and SESST dataets, read in and report findings
+
+I uploaded my data into github and now I will load the data from Github and CSV file. 
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+SESST <- readr::read_csv("https://raw.githubusercontent.com/sadia-perveen/DATA-607-Final-Project/master/Free%20Reduced%20Price%20Lunch.csv")
+ELAMATH <- readr::read_csv("C:\\Users\\syeds\\Desktop\\Sadia\\Data 607 Final Project\\ELA MATH.csv")
+
+```
+
+After getting my data I need to clean my data so that I only have the information needed to complete the analysis for district SES status compared to their yearly test scores.
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+#install.packages("tidyverse",repos = "http://cran.us.r-project.org")
+#library(tidyverse)
+
+
+# first I am removing all subgroups from the ELAMATH data set. 
+ELAMATH <- dplyr::filter(ELAMATH, SUBGROUP_NAME == "All Students")
+ELAMATH
+
+#Removing extra rows
+ELAMATH <- ELAMATH[,c('NAME', 'ITEM_SUBJECT_AREA', 'ITEM_DESC','MEAN_SCALE_SCORE')]
+
+ELAMATH <- dplyr::arrange(ELAMATH , NAME)
+
+
+# Now we are going to only keep district data. 
+ELAMATH <- dplyr::slice(ELAMATH, 17252:17635)
+
+# Since we have many grades we can further break it down and only look at grade 3 ELA. 
+ELAMATHGRD3 <- dplyr::filter(ELAMATH, ITEM_DESC == "Grade 3 ELA") 
+ELAMATHGRD3 <- ELAMATHGRD3[,c('NAME', 'ITEM_DESC', 'MEAN_SCALE_SCORE')]
+ELAMATHGRD3
+
+
+#Now we can clean up our SES data. 
+#Removing extra rows
+SESST <- SESST[,c('ENTITY_NAME', 'YEAR', 'PER_REDUCED_LUNCH')]
+SESST  <- dplyr::arrange(SESST, ENTITY_NAME)
+
+# Now we are going to only keep district data. 
+SESST <- dplyr::slice(SESST, 9016:9111)
+
+# Since the ELA/MATH scores are for 2017 year we will only keep that for SES. 
+SESST <- dplyr::filter(SESST, YEAR == "2017")
+
+colnames(SESST)[1] <- "NAME"
+
+```
+
+Now that we have both of our data sets cleaned we can merge them together. 
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+DATA <- dplyr::inner_join(ELAMATHGRD3, SESST, by = "NAME")
+DATA
+
+# defining my variables as numeric to perform the analysis. 
+DATA$MEAN_SCALE_SCORE <- as.numeric(DATA$MEAN_SCALE_SCORE)
+DATA$PER_REDUCED_LUNCH <- as.numeric(DATA$PER_REDUCED_LUNCH)
+```
+
+Now we have all of our data in one dataset needed for the analysis. 
+
+
+First we can look at some general information. 
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+names(DATA)
+str(DATA)
+summary(DATA)
+```
+Here we are using ggplot to  make a bar graph on the percent of reduced lunch per district (LOW SES status) and mean ELA scores. 
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+ggplot(DATA, aes(x=PER_REDUCED_LUNCH)) + geom_bar()
+ggplot(DATA, aes(x=MEAN_SCALE_SCORE)) + geom_bar()
+
+```
+
+Here I am using qplot (something I have not used before) to get a general trend of my data. 
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+qplot(x = MEAN_SCALE_SCORE, y = PER_REDUCED_LUNCH, data = DATA, geom = "point")
+```
+
+Making the Histogram of the two variables of interest. 
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+
+hist(DATA$MEAN_SCALE_SCORE)
+hist(DATA$PER_REDUCED_LUNCH)
+
+```
+
+To see the relationship between our two variables we can plot both of them and get the correlation coefficient. 
+
+
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+plot(DATA$MEAN_SCALE_SCORE, DATA$PER_REDUCED_LUNCH)
+cor(DATA$MEAN_SCALE_SCORE, DATA$PER_REDUCED_LUNCH)
+
+
+```
+
+The correlation coefficient is 0.5788396. We see a positive linear relationship therefore we can hypothesize that their may be significant relationship between the two variables such that as the Mean scale score increases the Percentage of students with reduced lunches increases as well. From this analysis we see that my assumption was incorrect. This actually shows the opposite trend. 
+
+
+
+Now we can look into the p-value to determine if the difference in significant.My NULL hypothesis is that there is no statistical significance between the two variables.  
+
+WE can see the linear line below and the statistical analysis. 
+```{r, message=FALSE, warning=FALSE, results=FALSE}
+m1 <- lm(PER_REDUCED_LUNCH ~ MEAN_SCALE_SCORE, data = DATA)
+plot(DATA$PER_REDUCED_LUNCH ~ DATA$MEAN_SCALE_SCORE)
+abline(m1)
+summary(m1)
+```
+-Our p value is 0.000519 which is below .05 therefore we have strong evidence against the null hypothesis. To conclude we can say that their is a statistical significance between the two variables.My Analysis was very limited as it only included a small dataset.  
+
+
+#### ANALYSIS 2 SECTION
+
+
+### Connect to NYTimes API MostPOPULAR
+
+Connect to NYtimes API and collect data through NYTIMES MostPopular API, type Viewed in 1 day and Shared on Facebook and Twitter in the last 30 days
+
+```{r}
+#Mostpopular article 
+#most viewed 1 day
+myurl1 <- "https://api.nytimes.com/svc/mostpopular/v2/viewed/1.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG"
+myresponse1 <- fromJSON(myurl1)
+#str(myresponse1)
+df1 <- myresponse1$results
+myresponse1$results %>% kable() %>% kable_styling() %>% scroll_box(width = "910px", height = "400px")
+
+
+#most shared twitter 30 day
+myurl3 <- "https://api.nytimes.com/svc/mostpopular/v2/shared/30/twitter.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG"
+myresponse3 <- fromJSON(myurl3)
+#str(myresponse3)
+df3 <- myresponse3$results
+myresponse3$results %>% kable() %>% kable_styling() %>% scroll_box(width = "910px", height = "400px")
+
+#most shared facebook 30 day
+myurl4 <- "https://api.nytimes.com/svc/mostpopular/v2/shared/30/facebook.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG"
+myresponse4 <- fromJSON(myurl4)
+#str(myresponse4)
+df4 <- myresponse4$results
+myresponse4$results %>% kable() %>% kable_styling() %>% scroll_box(width = "910px", height = "400px")
+```
+
+
+## Summarize and Print what was collected as shared on Twitter
+
+
+```{r}
+#facebook
+summary(myresponse4)
+summary(myresponse3)
+length(myresponse4$results)
+length(myresponse3$results)
+print(myresponse4$results$url[1])
+print(myresponse4$results$abstract[1])
+print(myresponse4$results$adx_keywords[1])
+
+print(myresponse4$results$url[2])
+print(myresponse4$results$abstract[2])
+print(myresponse4$results$adx_keywords[2])
+```
+
+
+## Summarize and Print what was collected as shared on Twitter
+
+
+```{r}
+#twitter
+print(myresponse3$results$url[1])
+print(myresponse3$results$abstract[1])
+print(myresponse3$results$adx_keywords[1])
+
+print(myresponse3$results$url[2])
+print(myresponse3$results$abstract[2])
+print(myresponse3$results$adx_keywords[2])
+```
+
+
+## Bind both datasets with the shared per Facebook and Twitter
+
+
+```{r}
+#bind both results together to a new dataset for facebook/twitter shares
+new.df <- rbind(df3, df4) 
+head(new.df)
+#str(new.df)
+#summary(new.df)
+```
+
+
+### NRC and Valence Sentiment Analysis
+
+## Get nrc sentiment and valence value for the articles shared on the abstract api field of the article
+
+
+
+```{r}
+#get nrc sentiment for abstract of articles shared on facebook and twitter
+nrc_data <- get_nrc_sentiment(new.df$abstract)
+valence <- (nrc_data[, 9]*-1) + nrc_data[, 10]
+
+#dataset with valence
+final_data <- cbind(new.df$abstract, new.df$count_type,nrc_data[1:10],valence)%>% kable() %>% kable_styling() %>% scroll_box(width = "910px", height = "400px")
+final_data
+
+barplot(
+  sort(colSums(prop.table(nrc_data))), 
+  horiz = TRUE, 
+  cex.names = 0.7, 
+  las = 1, 
+  main = "Emotions in Sample text", xlab="Percentage"
+)
+
+```
+
+## Get nrc sentiment at NYTIMES api at the des_facet field of the returned API data which categorizes articles based on descriptions
+
+
+
+```{r out.width="80%"}
+#split list for des_facet1 across all observations
+new.df2 <- data.frame()
+length(new.df$des_facet[[3]])
+for (i in 1:nrow(new.df)){
+  id <- as.numeric(i)
+  type <- new.df$count_type[i]
+  des_facet1 <- ''
+  if (length(new.df$des_facet[[i]] > 0)){
+  des_facet1 <- new.df$des_facet[[i]]}
+  new.df2 <- rbind(new.df2,(cbind(new.df[i,c(1,2,14)],id,type,des_facet1)))
+  
+}
+
+head(new.df2)
+new.df2$des_facet1[1:10]
+
+new.df2 %>%
+  count(type, des_facet1) %>%
+  top_n(50) %>%
+  ungroup() %>%
+  mutate(des_facet1 = reorder(des_facet1, n)) %>%
+  ggplot(aes(des_facet1, n, fill = type))  + geom_bar(stat = "identity") +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~type, scales = "free_y") +
+  labs(y = "Contribution to sentiment",
+       x = NULL) +
+  coord_flip() 
+
+
+```
+
+
+
+## Get Tokens and then build corpus and create wordcloud on the abstract field of the articles pulled back from API
+
+
+```{r}
+#get token words from $abstract of returned results on most popular articles
+p_word_v <- get_tokens(new.df$abstract, pattern = "\\W")
+
+#build corpus
+words <- Corpus(VectorSource(p_word_v))
+# Convert the text to lower case
+words <- tm_map(words, content_transformer(tolower))
+# Remove numbers
+words <- tm_map(words, removeNumbers)
+# Remove english common stopwords
+words <- tm_map(words, removeWords, stopwords("english"))
+# Remove punctuations
+words <- tm_map(words, removePunctuation)
+# Eliminate extra white spaces
+words <- tm_map(words, stripWhitespace)
+
+dtm <- TermDocumentMatrix(words)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=100, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+barplot(d[1:25,]$freq, las = 2, names.arg = d[1:25,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+
+
+```
+
+
+## Report how Syuzhet, bing, afinn and nrc reports sentiments
+
+
+```{r}
+syuzhet_vector <- get_sentiment(new.df$abstract, method="syuzhet")
+bing_vector <- get_sentiment(new.df$abstract, method="bing")
+afinn_vector <- get_sentiment(new.df$abstract, method="afinn")
+nrc_vector <- get_sentiment(new.df$abstract, method="nrc", lang = "english")
+
+#sign converts all positive #'s to 1 and all -ve # to -ve 1
+rbind(
+  sign(syuzhet_vector),
+  sign(bing_vector),
+  sign(afinn_vector),
+  sign(nrc_vector)
+)
+
+#understanding the overall emotional valence of the sentences, -ve indicates overall negative sentiment of the articles that are most popular across facebook and twitter that were shared
+sum(syuzhet_vector)
+mean(syuzhet_vector)
+summary(syuzhet_vector)
+
+```
+
+## Build Corpus for just des_facet field and report wordcloud 
+
+
+```{r}
+#build corpus for des_facet1
+words <- Corpus(VectorSource(new.df2$des_facet1))
+# Convert the text to lower case
+words <- tm_map(words, content_transformer(tolower))
+# Remove numbers
+words <- tm_map(words, removeNumbers)
+# Remove english common stopwords
+words <- tm_map(words, removeWords, stopwords("english"))
+# Remove punctuations
+words <- tm_map(words, removePunctuation)
+# Eliminate extra white spaces
+words <- tm_map(words, stripWhitespace)
+
+dtm <- TermDocumentMatrix(words)
+m <- as.matrix(dtm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+
+set.seed(1234)
+wordcloud(words = d$word, freq = d$freq, min.freq = 1,
+          max.words=100, random.order=FALSE, rot.per=0.35, 
+          colors=brewer.pal(8, "Dark2"))
+
+```
+
+
+### Start Section for NYTIMES Archive API for 2 timeframes. Report pull back November 2018 and December 2017 data. 
+
+## Loop through page JSON
+
+Because there are many pages, we have to loop through the page look at only 3 pages. Save Rdata file so we can reload and don't have to reconnect. Took about 3 minutes to get data. 
+
+
+```{r}
+myurlX <- "https://api.nytimes.com/svc/archive/v1/2018/11.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG"
+
+initialQuery <- fromJSON(myurlX)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+
+pages_2018 <- vector("list",length=maxPages)
+
+#try with the max page limit at 10
+maxPages = ifelse(maxPages >= 10, 5, maxPages)
+
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(myurlX , "&page=", i), flatten = TRUE) %>% data.frame() 
+  pages_2018[[i+1]] <- nytSearch 
+  Sys.sleep(5)
+}
+
+nytimes_2018_Novarchive_12072019 <- rbind_pages(pages_2018)
+save(nytimes_2018_Novarchive_12072019 ,file="nytimes_2018_Novarchive_12072019.Rdata")
+
+#str(nytimes_2018_Novarchive_12032019[1:10])
+nrow(nytimes_2018_Novarchive_12072019)
+colnames(nytimes_2018_Novarchive_12072019)
+nytimes_2018_Novarchive_12072019$response.docs.snippet[1:50]
+```
+
+## Bigram Sentiment analysis on 2018 data and igraph
+
+
+```{r dpi = 200}
+ new_tibble <- enframe(nytimes_2018_Novarchive_12072019$response.docs.snippet[1:50], name = NULL)
+my_frame <- data.frame(nytimes_2018_Novarchive_12072019$response.docs.snippet)
+names(my_frame) <- c('snippetcol')
+nrow(my_frame)
+snippet_bigrams <-  my_frame %>%
+  unnest_tokens(bigram, snippetcol, token = "ngrams", n = 2)
+nrow(snippet_bigrams)
+
+snippet_bigrams %>%
+  count(bigram, sort = TRUE)
+
+bigrams_separated <- snippet_bigrams %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered <- bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# new bigram counts:
+bigram_counts <- bigrams_filtered %>% 
+  count(word1, word2, sort = TRUE)
+
+bigram_counts
+
+# filter for only relatively common combinations
+bigram_graph <- bigram_counts %>%
+  filter(n > 70) %>%
+  graph_from_data_frame()
+
+bigram_graph
+
+set.seed(2017)
+
+
+  ggraph(bigram_graph, layout = "kk") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+#ggsave("bigramgraph3.pdf", bigramgraph3, dpi = 200) 
+
+set.seed(2016)
+
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+ggraph(bigram_graph, layout = "kk") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+#ggsave("bigramgraph4.pdf", bigramgraph4, dpi = 200) 
+
+
+# length(nytimes_2018_Novarchive_12032019$response.docs.snippet)
+# my_corpus <- corpus(nytimes_2018_Novarchive_12032019$response.docs.snippet)
+# my_sentences <- corpus_reshape(my_corpus, to = "sentences")
+# ndoc(my_sentences)
+# texts(my_sentences)[1]
+
+```
+
+## Start Section for NYTIMES Archive API. Report pull back December 2017 data.
+
+
+```{r}
+myurlX <- "https://api.nytimes.com/svc/archive/v1/2017/12.json?api-key=wl3OA7v4AV7cjxGya142nvRGGv46HdNG"
+
+initialQuery <- fromJSON(myurlX)
+maxPages <- round((initialQuery$response$meta$hits[1] / 10)-1) 
+
+pages_2017 <- vector("list",length=maxPages)
+
+#try with the max page limit at 10
+maxPages = ifelse(maxPages >= 10, 8, maxPages)
+
+for(i in 0:maxPages){
+  nytSearch <- fromJSON(paste0(myurlX , "&page=", i), flatten = TRUE) %>% data.frame() 
+  pages_2017[[i+1]] <- nytSearch 
+  Sys.sleep(5)
+}
+
+nytimes_2017_Decarchive_12072019 <- rbind_pages(pages_2017)
+save(nytimes_2017_Decarchive_12072019 ,file="nytimes_2017_Decarchive_12072019")
+
+#str(nytimes_2018_Novarchive_12032019[1:10])
+nrow(nytimes_2017_Decarchive_12072019)
+colnames(nytimes_2017_Decarchive_12072019)
+nytimes_2017_Decarchive_12072019$response.docs.snippet[1:50]
+```
+
+## Bigram Sentiment analysis on 2017 December data and igraph
+
+```{r dpi = 200}
+#new_tibble <- enframe(nytimes_2018_Novarchive_12032019$response.docs.snippet[1:50], name = NULL)
+my_frame2 <- data.frame(nytimes_2017_Decarchive_12072019$response.docs.snippet)
+names(my_frame2) <- c('snippetcol')
+nrow(my_frame2)
+snippet_bigrams2 <-  my_frame2 %>%
+  unnest_tokens(bigram, snippetcol, token = "ngrams", n = 2)
+nrow(snippet_bigrams2)
+
+snippet_bigrams2 %>%
+  count(bigram, sort = TRUE)
+
+bigrams_separated2 <- snippet_bigrams2 %>%
+  separate(bigram, c("word1", "word2"), sep = " ")
+
+bigrams_filtered2 <- bigrams_separated2 %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+# new bigram counts:
+bigram_counts2 <- bigrams_filtered2 %>% 
+  count(word1, word2, sort = TRUE)
+
+head(bigram_counts2)
+
+# filter for only relatively common combinations
+bigram_graph2 <- bigram_counts2 %>%
+  filter(n > 70) %>%
+  graph_from_data_frame()
+
+bigram_graph2
+
+set.seed(2017)
+
+ggraph(bigram_graph2, layout = "kk") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+#ggsave("bigramigraph1.pdf", bigramigraph1, dpi = 200) 
+
+
+set.seed(2016)
+
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+ggraph(bigram_graph2, layout = "kk") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+
+#ggsave("bigramigraph2.pdf", bigramigraph2, dpi = 200) 
+
+
+# length(nytimes_2018_Novarchive_12032019$response.docs.snippet)
+# my_corpus <- corpus(nytimes_2018_Novarchive_12032019$response.docs.snippet)
+# my_sentences <- corpus_reshape(my_corpus, to = "sentences")
+# ndoc(my_sentences)
+# texts(my_sentences)[1]
+
+```
+
+### MODEL LDA: Run a topic model using quant_Eda for topics = 20
+
+
+```{r dpi = 200}
+length(nytimes_2018_Novarchive_12072019$response.docs.snippet)
+my_corpus <- corpus(nytimes_2018_Novarchive_12072019$response.docs.snippet[1:10000])
+
+quant_dfm <- dfm(my_corpus, 
+                remove_punct = TRUE, remove_numbers = TRUE, remove = stopwords("english"))
+quant_dfm <- dfm_trim(quant_dfm, min_termfreq = 4, max_docfreq = 10)
+quant_dfm
+
+set.seed(100)
+if (require(topicmodels)) {
+    my_lda_fit5 <- LDA(convert(quant_dfm, to = "topicmodels"), k = 20)
+    get_terms(my_lda_fit5, 10)
+}
+
+
+topics <- tidy(my_lda_fit5, matrix = "beta")
+topics
+
+top_terms <- topics %>%
+  group_by(topic) %>%
+  top_n(5, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+
+top_terms %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~ topic, scales = "free") +
+  coord_flip() +
+  scale_x_reordered()
+
+#ggsave("topicplot.pdf",topicplot, dpi = 300) 
+
+
+```
+
+## Error running a cluster dendoogram
+
+Trying to run a cluster dendogram but unable to resolve errors on NaN errors , unsure how to resovle these on the corpus. Intention was to show a dendogram.
+
+```{r}
+
+# quant_dfm <- dfm(my_corpus,
+#                 remove_punct = TRUE, remove_numbers = TRUE, remove = stopwords("english"))
+# quant_dfm <- dfm_trim(quant_dfm, min_termfreq = 4, max_docfreq = 10)
+# quant_dfm1 <- dfm_smooth(quant_dfm, smoothing =1)
+# 
+# 
+# # hierarchical clustering - get distances on normalized dfm
+# quant_dfm_mat1 <- dfm_weight(quant_dfm1,scheme = "prop") %>%
+#     textstat_dist(method = "euclidean") %>% 
+#     as.dist()
+# 
+# dfm_smooth(quant_dfm_mat, smoothing =1)
+# 
+# 
+# 
+# quant_dfm_new <- NaRV.omit(as.matrix(quant_dfm_mat))
+# head(quant_dfm_new )
+# 
+# quant_dfm1  <- as.matrix(quant_dfm_mat, )
+# quant_dfm1[2]
+# nrow(quant_dfm1)
+# 
+# # hiarchical clustering the distance object;100
+# quant_dfm_cluster <- hclust(quant_dfm_mat)
+# 
+# # label with document names
+# quant_dfm_cluster$labels <- docnames(quant_dfm_cluster)
+# 
+# # plot as a dendrogram
+# plot(quant_dfm_cluster, xlab = "", sub = "", 
+#      main = "Euclidean Distance on Normalized Token Frequency")
+# 
+# 
+# dd <- hclust(as.matrix(quant_dfm_mat))
+
+```
+
+
+### Conclusions
+
+## ANALYSIS 1 SECTION 
+
+The correlation coefficient is 0.5788396. We see a positive linear relationship therefore we can hypothesize that their may be significant relationship between the two variables such that as the Mean scale score increases the Percentage of students with reduced lunches increases as well. From this analysis we see that my assumption was incorrect. This actually shows the opposite trend. 
+
+Now we can look into the p-value to determine if the difference in significant.My NULL hypothesis is that there is no statistical significance between the two variables.  
+
+WE can see the linear line below and the statistical analysis.
+
+-Our p value is 0.000519 which is below .05 therefore we have strong evidence against the null hypothesis. To conclude we can say that their is a statistical significance between the two variables.My Analysis was very limited as it only included a small dataset.
+
+## ANALYSIS 2 SECTION:
+
+Extracting data from NYtimes API, learning how to extract page wise data and building corpus from it was challenging. Also running an LDA topic model and fit needs to be explored better. On further reading the way all the articles were combined and read in across an entire month to understand topics might not be the right approach. Segmenting monthly articles retrieved and doing a gamma distribution a analysis on the LDA fit graph to do more analyis on topic terms and mismatch would be a better analyis in the future. 
+Upon reviewing the frequency of terms related to me too, based on sentiment and bigram analysis the presence of this term within the NYtimes articles retrieved was not significant compared to topics related to Present Trump within the period of October 2018 or October, November, December 2017. The height of the Me too movement was in October 2017 so I expected to see possibly more on the wordcloud or articles circulated and shared on NYtimes related to this topic. Possibly another option would be to retrieve 100 max pages from the API as opposed to only 8 pages which by itself retrieved created a large corpus.  So, the next method to choose would be through twitter which may have better data if searched on celebrities and specifically the #metoo related to the metoo movement. Also we scrapped the Wikipedia metoo main page and bigram analysis conducted on that and data stored in neo4j for future relationship (PART2). 
+
+## Works Cited
+
+Textmining with R https://www.tidytextmining.com/
+https://developer.nytimes.com/apis
+
+  
+
+ 
+
+

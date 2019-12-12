@@ -1,0 +1,318 @@
+---
+title: "Data607FinalProjectSadiaBanuPart2"
+author: "Banu Boopalan"
+date: "12/11/2019"
+output:
+  html_document:
+    theme: journal
+    toc: TRUE
+    toc_float: TRUE  
+    toc_depth: 3
+    code_folding: hide
+  ioslides_presentation: default
+  pdf_document: default
+  slidy_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(jsonlite)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(kableExtra)
+library("tm")
+library("SnowballC")
+library("wordcloud")
+library("RColorBrewer")
+library(rvest)
+library(syuzhet)
+library(ggplot2)
+library(tidyverse)
+library(tidyr)
+library(dplyr)
+library(stringr)
+library(tidytext)
+library(tm)
+library(reshape2)
+library(topicmodels)
+library(widyr)
+library(ggplot2)
+library(igraph)
+library(ggraph)
+library(RNeo4j)
+```
+
+#### PROJECT TEAM: SADIA AND BANU DATA 607 FINAL PROJECT (PART2 DOCUMENT)
+
+### ANALYSIS:
+
+Our second part of the analyis was to understand how to scrape Wikipedia for metoo webpage and then store that in Neo4j and retrieve data.
+The goal was to see if we can explain graph database and understand and expand on modeling topics through neo4j in the future.
+For this we will need to install neo4j and use RNeo4j library from github https://github.com/nicolewhite/RNeo4j#nodes
+to query the data model in Cypher.
+
+```{r}
+url <- "https://en.wikipedia.org/wiki/Me_Too_movement"
+
+  tag_headline <- url %>%
+    read_html() %>%
+    html_nodes(xpath = "//h3") %>%
+    html_text()
+  
+  tag_text <- url %>%
+    read_html() %>%
+    html_nodes(xpath = "//p | //h3") %>%
+    html_text()
+
+  tag_text[1:1]
+  
+str(tag_headline)
+str(tag_text)
+
+df1 <- as.data.frame(tag_headline)
+
+df2 <- as.data.frame(tag_text)
+str(df2)
+
+colnames(df1)[1] <- "matchcol"
+colnames(df2)[1] <- "matchcol"
+
+str(df1)
+str(df2)
+```
+
+## Cleanup the scrapped dataframe and attach flag headline and paragraph based on the //p and //h XPATH html extraction. Plot bigrams and igraph.
+
+
+```{r }
+df1 %>% 
+  mutate_if(is.factor, as.character) %>% 
+  glimpse()
+
+df2 %>% 
+  mutate_if(is.factor, as.character) %>% 
+  glimpse()
+
+df3 <- merge(df1, df2, by = "matchcol", all.y = TRUE)
+
+df4 <- cbind(df2,length(df2$matchcol))
+
+list <- nchar(as.character(df4$matchcol))
+
+final <- cbind(df4,list)
+
+ tagheadline <- cbind(df1,nchar(as.character(df1$matchcol)))
+
+final1 <- cbind(final, ifelse(nchar(as.character(df4$matchcol)) <=48, "headline", "Paragraph"))
+
+str(final1)
+
+#final data
+newdata <- final1[which(final1$list > 1),]
+
+bigrams <- newdata[110:231,] %>%
+  unnest_tokens(token1, matchcol, token = "ngrams", n = 2) %>%
+  separate(token1, c("word1", "word2"), sep = " ") %>%
+  filter(!word1 %in% stop_words$word,
+         !word2 %in% stop_words$word) %>%
+  count(word1, word2, sort = TRUE)
+
+#count words co-occuring within sections
+
+colnames(newdata)[4] <- "flag"
+
+tokennewdata <- newdata[110:231,] %>%
+  unnest_tokens(token1, matchcol, token = "ngrams", n = 1) %>% filter(!token1 %in% stop_words$word) %>% group_by(token1) %>% filter(n()>=20)%>% pairwise_cor(token1,flag,sort=TRUE)
+       
+tokennewdata[100,]
+
+
+                               
+```
+
+## Plot bigrams of scrapped webpage on metoo main wiki page
+
+```{r}
+
+# filter for only relatively common combinations
+bigram_graph <- bigrams%>%
+  filter(n > 1) %>%
+  graph_from_data_frame()
+
+bigram_graph
+
+set.seed(2017)
+
+ggraph(bigram_graph, layout = "kk") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+#Neo4j section
+
+```
+
+
+## Loop through to figure out how to assign headline/paragraph for the sections that are together. 
+
+For instance, a headline can have multiple paragraphs so loop and assign the flag correctly as these are needed to build a Neo4j datamodel
+
+```{r}
+
+as.numeric(rownames(newdata[2,]))
+str(newdata)
+
+newdata1 <- newdata %>% mutate_if(is.factor, as.character)
+str(newdata1)
+
+isprevparagraph <- "No"
+isprevheadline  <- "No"
+
+nrow(newdata1)
+newdata1$flag[8]
+
+df <- NULL
+ptype_id <- 88
+isprevheadline <- "No"
+
+for (i in 1:nrow(newdata1))
+ 
+    {
+      if (newdata1$flag[i] == "headline")   
+        { 
+          isprevheadline <- "Yes"
+         ptype_id <- as.numeric(rownames(newdata1[i,]))
+         type_id <- as.numeric(rownames(newdata1[i,]))
+          type_name <- newdata1$flag[i]
+          text_id <- i
+          text_val <- newdata1$matchcol[i]
+               }
+  else if (newdata$flag[i] == "Paragraph") 
+      { 
+          if (isprevheadline == "Yes" )
+          {
+            type_id <- ptype_id
+            type_name <- newdata1$flag[i]
+            text_id <- i
+            text_val <- newdata1$matchcol[i]
+            #isprevheadline == "No"
+            
+          } 
+      else 
+          {
+          type_id <- as.numeric(rownames(newdata1[i,]))
+          type_name <- newdata1$flag[i]
+          text_id <- i
+          text_val <- newdata1$matchcol[i]                 
+          }
+  }
+  
+ df = rbind(df, data.frame(type_id,type_name,text_id,text_val,isprevheadline, ptype_id))
+}
+
+df[1:13,] %>%kable() %>% kable_styling(c("striped", "bordered"))
+
+
+```
+
+
+
+## Connect to Neo4j start graph and build database
+
+```{r}
+
+BBGraph <- startGraph("http://localhost:7474/db/data/",username="neo4j",password="cunyuser")
+
+
+clear(BBGraph, input = F)
+
+Row_nodes = list()
+Type_nodes = list()
+
+
+#create row nodes
+for (i in 1:nrow(df)){
+ 
+  Row_nodes[[df$text_id[i]]] = createNode(BBGraph, "Text",
+                                          Text_ID=df$text_id[i], 
+                                          Text_Value = df$text_val[i])  
+
+
+
+
+  Type_nodes[[df$text_id[i]]] = createNode(BBGraph, "TextType",
+                                           Text_ID =  df$text_id[i],
+                                           Type_ID = df$type_id[i], 
+                                           Type_Name = as.character(df$type_name[i]) ) 
+}
+
+#node relationship
+
+
+```
+
+
+## Build Relationship
+
+```{r}
+
+#node relationship
+
+# Loop through  
+for (i in 1:nrow(df)){
+ 
+  myrow = Row_nodes[[df$text_id[i]]]
+  myid1 = Type_nodes[[df$text_id[i]]]
+  myid = Type_nodes[[df$type_id[i]]]
+  mytype = Type_nodes[[df$type_id[i]]]
+  mytypename = Type_nodes[[df$type_name[i]]]
+  myvalue = Row_nodes[[df$text_val[i]]]
+    
+  createRel(myrow, paste("matches"), myid1)
+  createRel(myrow, paste("is of section"), mytype)
+  createRel(myrow, paste("is of type"), mytypename)
+  createRel(myrow, paste("contains"), myvalue)
+  }
+
+#Retrieving Data from Neo4j
+
+```
+
+
+## Query using cypher show results and pull igraph. Return all rows of headline type 17 and the corresponding paragraphs for that headline. The goal here was to figure out how to pull all paragraphs linked to a headline and perform modeling on that data.  The neo4j model needs to be finetuned as I have shown below. 
+
+```{r}
+
+query = "
+MATCH (f:Text)-[r]->(m:TextType) WHERE f.Text_ID = m.Text_ID AND m.Type_ID = 17 RETURN f.Text_ID,f.Text_Value,m.Type_ID,m.Type_Name
+"
+# execute cypher
+edges = cypher(BBGraph, query)
+
+# display the results to confirm that the data is present
+edges %>% kable() %>% kable_styling(c("striped", "bordered"))
+
+igh = graph.data.frame(edges)
+ggraph(igh, layout = "kk") +
+  geom_edge_link() +
+  geom_node_point() +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1)
+
+```
+
+
+
+## Neo4j screenshots of windows service and graph database and queries
+
+![Neo4j browser port Mygraph and cypher query](C:\Users\Banu\Documents\RScriptfiles\FinalProject\cypherqueryscreen1neo4j.png)
+![Neo4j MyGraph model neo4j](C:\Users\Banu\Documents\RScriptfiles\FinalProject\mygraphscreen.png)
+![Neo4j my Windows localhostbrowsescreen](C:\Users\Banu\Documents\RScriptfiles\FinalProject\myentirescreenneo4j.png)
+
+## Works cited
+
+These sites were very helpful in understanding how to do this process by connecting R to Neo4j. Not many sites were out there that helped really understand basic understanding and steps except these. 
+
+http://rpubs.com/myampol/MY-DATA607-Week12-MySQL-to-Neo4j
+https://rdrr.io/github/nicolewhite/RNeo4j/
+https://neo4j.com/docs/operations-manual/current/
